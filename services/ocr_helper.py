@@ -11,15 +11,13 @@ allowed_tuples = ('1C', '7A', '55', 'BD', 'E9')
 allowed_characters = ('1', '7', '5', 'A', 'B', 'C', 'D', 'E')
 
 
-def ocr_core(filename):
-
-    image = cv2.imread(filename)
+def ocr_core(image):
     code_matrix = cut_code_matrix(image)
     code_matrix_text = get_text_from_image(code_matrix)
-
+    print(code_matrix_text)
     required_sequence = cut_required_sequence(image)
     required_sequence_text = get_text_from_image(required_sequence)
-
+    print(required_sequence_text)
     return parse_and_fix_result(code_matrix_text), parse_and_fix_result(required_sequence_text)
 
 
@@ -42,8 +40,12 @@ def fix_text(chars):
             if chars in allowed_tuple:
                 return allowed_tuple
     else:
-        # Filter the text to get rid of wrong characters and ensure the returned list is distinct
-        filtered_text = "".join(list(set(filter(lambda ch: ch in allowed_characters, chars))))
+        try:
+            # Filter the text to get rid of wrong characters and ensure the returned list is distinct
+            filtered_text = "".join(list(set(filter(lambda ch: ch in allowed_characters, chars))))
+        except RecursionError as re:
+            print('RecursionError: ' + chars)
+            raise
         return fix_text(filtered_text)
     return chars
 
@@ -54,10 +56,10 @@ def get_text_from_image(image):
     image = thresholding(image)
     image = dilate(image)
     image = invert(image)
-    #cv2.imshow("test", image)
+    cv2.imshow("test", image)
     #cv2.waitKey(0)
 
-    custom_config = r"-c tessedit_char_whitelist=' ABCDEF123456789' --psm 6"
+    custom_config = r"-c tessedit_char_whitelist=' ABCDEF1579' --psm 6"
     text = pytesseract.image_to_string(image, config=custom_config)
     return text
 
@@ -69,4 +71,4 @@ def cut_code_matrix(image):
 
 def cut_required_sequence(image):
     height, width, color = image.shape
-    return image[round(height * 0.31):round(height * 0.5), round(width*0.45):round(width*0.55)]
+    return image[round(height * 0.31):round(height * 0.5), round(width*0.43):round(width*0.55)]

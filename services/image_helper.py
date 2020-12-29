@@ -19,7 +19,7 @@ def thresholding(image):
 
 # dilation
 def dilate(image):
-    kernel = np.ones((2, 2), np.uint8)
+    kernel = np.ones((1, 1), np.uint8)
     return cv2.dilate(image, kernel, iterations=1)
 
 
