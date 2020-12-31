@@ -1,4 +1,7 @@
+from pytesseract import Output
+
 from services.image_helper import *
+from services.models import OcrResult
 
 try:
     from PIL import Image
@@ -8,17 +11,17 @@ import pytesseract
 import cv2
 
 allowed_tuples = ('1C', '7A', '55', 'BD', 'E9')
-allowed_characters = ('1', '7', '5', 'A', 'B', 'C', 'D', 'E')
+allowed_characters = ('1', '7', '5', '9', 'A', 'B', 'C', 'D', 'E')
 
 
 def ocr_core(image):
     code_matrix = cut_code_matrix(image)
-    code_matrix_text = get_text_from_image(code_matrix)
-    print(code_matrix_text)
+    code_matrix_result = get_text_from_image(code_matrix)
+    print(code_matrix_result)
     required_sequence = cut_required_sequence(image)
-    required_sequence_text = get_text_from_image(required_sequence)
-    print(required_sequence_text)
-    return parse_and_fix_result(code_matrix_text), parse_and_fix_result(required_sequence_text)
+    required_sequence_result = get_text_from_image(required_sequence)
+    print(required_sequence_result)
+    return code_matrix_result, required_sequence_result
 
 
 def parse_and_fix_result(text):
@@ -50,18 +53,33 @@ def fix_text(chars):
     return chars
 
 
-
 def get_text_from_image(image):
     image = get_grayscale(image)
     image = thresholding(image)
     image = dilate(image)
     image = invert(image)
-    cv2.imshow("test", image)
+    #cv2.imshow("test", image)
     #cv2.waitKey(0)
 
+    # Only characters that can occur are whitelisted. PSM = 6 because we want to retain the order of the text.
     custom_config = r"-c tessedit_char_whitelist=' ABCDEF1579' --psm 6"
-    text = pytesseract.image_to_string(image, config=custom_config)
-    return text
+    d = pytesseract.image_to_data(image, output_type=Output.DICT, config=custom_config)
+    n_boxes = len(d['level'])
+    result = []
+    result_row = []
+    for i in range(n_boxes):
+        if d['text'][i] == '':
+            if len(result_row) == 0:
+                continue
+            else:
+                result.append(result_row)
+                result_row = []
+
+        text = fix_text(d['text'][i])
+        (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+        result_row.append(OcrResult(text, [x + w * 0.5, y + h * 0.5]))
+    result.append(result_row)
+    return result
 
 
 def cut_code_matrix(image):

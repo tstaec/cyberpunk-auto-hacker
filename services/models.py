@@ -25,6 +25,12 @@ class Node:
         return self.f > other.f
 
 
+class OcrResult:
+    def __init__(self, code=None, position=None):
+        self.position = position
+        self.code = code
+
+
 class RowType(IntEnum):
     Row = -1
     Column = 1
