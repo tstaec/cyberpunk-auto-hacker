@@ -4,7 +4,7 @@ Script to automatically detect and solve the hacking minigame in Cyberpunk 2077.
 
 ## What it does
 
-![Hack the planet](https://imgur.com/a/7X9X5Mq)
+https://imgur.com/a/7X9X5Mq
 
 ## Running auto-hacker
 
