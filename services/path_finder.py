@@ -2,9 +2,38 @@
 # https://gist.github.com/ryancollingwood/32446307e976a11a1185a5394d6657bc
 import heapq
 from services.models import *
+from multiprocessing import Process, Queue
 
 
 def find_path(matrix, end_paths, max_path_length):
+    result_queue = Queue()
+    processes = []
+    return_values = []
+    heapq.heapify(return_values)
+
+    start_nodes = create_nodes(Node(None, [0, 0], None), RowType.Row, matrix[0, :], end_paths, False)
+
+    # Parallelize for each start node (top row element)
+    for start_node in start_nodes:
+        p = Process(target=find_path_section, args=(result_queue, matrix, end_paths, max_path_length, start_node))
+        processes.append(p)
+        p.start()
+
+    for _ in processes:
+        ret = result_queue.get()  # will block
+        # If we already found a complete path we can terminate the remaining processes
+        if ret.is_complete_end:
+            for p in processes:
+                p.terminate()
+                p.join()
+            return return_path(ret)
+        heapq.heappush(return_values, ret)
+    for p in processes:
+        p.join()
+
+    return return_path(heapq.heappop(return_values))
+
+def find_path_section(result_queue, matrix, end_paths, max_path_length, start_node):
     # Initialize open list
     open_list = []
     closed_list = []
@@ -14,9 +43,7 @@ def find_path(matrix, end_paths, max_path_length):
     heapq.heapify(closed_list)
 
     # Add the start nodes(top row of the matrix)
-    start_nodes = create_nodes(Node(None, [0, 0], None), RowType.Row, matrix[0, :], end_paths, False)
-    for start_node in start_nodes:
-        heapq.heappush(open_list, start_node)
+    heapq.heappush(open_list, start_node)
 
     outer_iterations = 0
 
@@ -30,7 +57,9 @@ def find_path(matrix, end_paths, max_path_length):
         # Check if we found a path that solves all required sequences
         if is_completed(current_node, end_paths):
             print('Complete path found:' + return_path_code(current_node))
-            return return_path(current_node)
+            current_node.is_complete_end = True
+            result_queue.put(current_node)
+            return
 
         # check if the current path is longer than the max allowed path length,
         # max_path_length is the amount of allowed nodes('buffer' in Cyberpunk).
@@ -55,11 +84,13 @@ def find_path(matrix, end_paths, max_path_length):
             # Add the child to the open list
             heapq.heappush(open_list, child)
 
+    print(f' Path finding completed, processed {outer_iterations} nodes.')
     # could not find a complete path. Returning the best path we found.
     if len(closed_list) > 0:
-        return return_path(heapq.heappop(closed_list))
+        result = heapq.heappop(closed_list)
     else:
-        return None
+        result = None
+    result_queue.put(result)
 
 
 # Checks if the new node was already used int the path of the current node

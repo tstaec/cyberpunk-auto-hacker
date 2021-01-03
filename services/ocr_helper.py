@@ -1,6 +1,9 @@
+import time
+
 from pytesseract import Output
 from services.image_helper import *
 from services.models import OcrResult
+from multiprocessing import Process, Queue
 import pytesseract
 
 allowed_tuples = ('1C', '7A', '55', 'BD', 'E9', 'FF')
@@ -10,19 +13,41 @@ custom_config = r"-c tessedit_char_whitelist=' ABCDEF1579' --psm 6"
 
 
 def ocr_core(image):
-    # Process the required sequences first because it is faster.
-    required_sequence = cut_required_sequence(image)
-    required_sequence_result = get_text_from_image(required_sequence)
+    result_queue = Queue()
+    processes = []
+    return_values = []
 
-    # If the required sequences could not be read skip the rest.
-    if required_sequence_result is None or len(required_sequence_result) < 1:
+    required_sequence = cut_required_sequence(image)
+    code_matrix, offset_matrix_x, offset_matrix_y = cut_code_matrix(image)
+
+    # Start both ocr processes
+    sequence_process = Process(target=get_text_from_image, args=(result_queue, 'required_sequence', required_sequence))
+    processes.append(sequence_process)
+    sequence_process.start()
+
+    code_matrix_process = Process(target=get_text_from_image, args=(result_queue, 'code_matrix', code_matrix))
+    processes.append(code_matrix_process)
+    code_matrix_process.start()
+
+    # retrieve both return values
+    ret = result_queue.get()
+    return_values.append(ret)
+    ret = result_queue.get()
+    return_values.append(ret)
+
+    sequence_process.join()
+    code_matrix_process.join()
+
+    required_sequence_result = next((result for identifier, result in return_values if identifier == 'required_sequence'), None)
+    code_matrix_result = next((result for identifier, result in return_values if identifier == 'code_matrix'), None)
+
+    # If the required sequences could not be read or are too short to be valid, skip the rest.
+    if required_sequence_result is None or len(required_sequence_result) < 1 or len(required_sequence_result[0]) < 2:
         return None, None, None, None
     print([[e.code for e in row] for row in required_sequence_result])
 
-    code_matrix, offset_matrix_x, offset_matrix_y = cut_code_matrix(image)
-    code_matrix_result = get_text_from_image(code_matrix)
-
-    if code_matrix_result is None or len(code_matrix_result) < 5:
+    # If the code matrix could not be read or is too short to be valid, skip the rest.
+    if code_matrix_result is None or len(code_matrix_result) < 5 or len(code_matrix_result[0]) != len(code_matrix_result):
         return None, None, None, None
     print([[e.code for e in row] for row in code_matrix_result])
 
@@ -60,7 +85,7 @@ def fix_text(chars):
 
 
 # Extract the textual data from the image.
-def get_text_from_image(image):
+def get_text_from_image(result_queue, identifier, image):
     image = get_grayscale(image)
     image = thresholding(image)
     image = dilate(image)
@@ -69,8 +94,10 @@ def get_text_from_image(image):
     # cv2.waitKey(0)
 
     print('Start OCR processing.')
+    start = time.time()
     d = pytesseract.image_to_data(image, output_type=Output.DICT, config=custom_config)
-    print('OCR processing finished.')
+    end = time.time()
+    print(f'OCR processing finished in {end - start}s')
 
     found_lines = max(d['line_num'])
     max_word_count = max(d['word_num'])
@@ -89,7 +116,8 @@ def get_text_from_image(image):
             fixed_text = fix_text(text)
             if fixed_text is None:
                 print(f'Could not fix tuple {text}. Aborting.')
-                return None
+                result_queue.put((identifier, None))
+                return
             # Get the coordinates of the surrounding box for the found text to be used later to execute the clicks.
             (x, y, w, h) = (d['left'][index], d['top'][index], d['width'][index], d['height'][index])
             width = d['width'][index]
@@ -101,14 +129,15 @@ def get_text_from_image(image):
             try:
                 if j >= max_word_count or i >= found_lines:
                     print('Invalid matrix found. Aborting OCR processing.')
-                    return None
+                    result_queue.put((identifier, None))
+                    return
                 result[i][j] = OcrResult(fixed_text, [x + w * 0.5, y + h * 0.5])  # Get the middle of the bounding box
             except IndexError:
                 raise
             j += 1
 
     fix_holes(result, image)
-    return result
+    result_queue.put((identifier, result))
 
 
 def Average(lst):
@@ -136,10 +165,21 @@ def fix_holes(matrix, image):
                             element_index += 1
                         correct_row_element = row[element_index]
                         # Cut the existing image so we only get the area of the missing tuple.
-                        new_cut = image[
-                                  round(correct_row_element.position[1] - tolerance):round(
-                                      correct_row_element.position[1] + tolerance),
-                                  round(col_element.position[0] - tolerance):round(col_element.position[0] + tolerance)]
+
+                        # This is for debugging an exception regarding the area of the cut image
+                        x1 = round(correct_row_element.position[1] - tolerance)
+                        if x1 < 0:
+                            x1 = 0
+                        x2 = round(correct_row_element.position[1] + tolerance)
+                        if x2 >= image.shape[0]:
+                            x2 = image.shape[0] - 1
+                        y1 = round(col_element.position[0] - tolerance)
+                        if y1 < 0:
+                            y1 = 0
+                        y2 = round(col_element.position[0] + tolerance)
+                        if y2 >= image.shape[1]:
+                            y2 = image.shape[1] - 1
+                        new_cut = image[x1:x2, y1:y2]
                         # Rerun tesseract with the new image, use image_to_string since we expect only a single word.
                         new_text = pytesseract.image_to_string(new_cut, config=custom_config).strip()
                         new_text = fix_text(new_text)

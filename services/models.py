@@ -7,7 +7,7 @@ class Node:
         self.position = position
         self.code = code
         self.row_type = row_type
-
+        self.is_complete_end = False
         self.f = 0
 
     def __eq__(self, other):

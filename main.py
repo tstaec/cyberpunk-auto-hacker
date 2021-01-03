@@ -5,12 +5,9 @@ from services.screen_grabber import *
 import time
 import argparse
 
-version_info = (1, 0, 0)
+version_info = (1, 0, 1)
 version = '.'.join(str(c) for c in version_info)
 
-# interval_seconds = 2.0
-# buffer_size = 5
-# save_images = False
 
 def main():
     parser = argparse.ArgumentParser()
@@ -65,7 +62,9 @@ def execute(buffer_size, save_images, interval_seconds):
                 for sequence in required_sequences:
                     end_paths.append(''.join([s.code for s in sequence]))
 
+                print('Finding path')
                 path = find_path(np.array(matrix), end_paths, buffer_size)
+                print('Finding path complete')
                 execute_clicks(matrix, path, offset_matrix_x, offset_matrix_y)
                 print(path)
         time.sleep(interval_seconds - ((time.time() - start_time) % interval_seconds))
