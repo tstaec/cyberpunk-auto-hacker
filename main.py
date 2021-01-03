@@ -1,3 +1,5 @@
+import multiprocessing
+
 from services.click_helper import execute_clicks
 from services.ocr_helper import ocr_core
 from services.path_finder import find_path
@@ -5,11 +7,12 @@ from services.screen_grabber import *
 import time
 import argparse
 
-version_info = (1, 0, 1)
+version_info = (1, 0, 2)
 version = '.'.join(str(c) for c in version_info)
 
 
 def main():
+    print('Starting...')
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--buffer',
@@ -71,4 +74,6 @@ def execute(buffer_size, save_images, interval_seconds):
 
 
 if __name__ == "__main__":
+    # On Windows calling this function is necessary if using pyinstaller to build an executable..
+    multiprocessing.freeze_support()
     main()

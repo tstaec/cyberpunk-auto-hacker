@@ -1,7 +1,7 @@
 import pydirectinput
 
 pydirectinput.PAUSE = 0.05  # pause between actions, if 0 strange things can happen
-
+pydirectinput.FAILSAFE = False
 
 # Cyberpunk is a special kind of trouble. Every time you switch to the game, the windows cursor is moved to the exact
 # middle of the screen. Every movement in the Cyberpunk window does not move that cursor. Since we can not read the
