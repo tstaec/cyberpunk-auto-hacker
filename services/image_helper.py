@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+# These are a bunch of magic number, none should be taken as fixed
+
 
 # get grayscale image
 def get_grayscale(image):
